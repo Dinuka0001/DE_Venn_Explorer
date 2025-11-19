@@ -2,30 +2,25 @@
 # Version (1.0) - Enhanced with improved error handling and aesthetics
 # By Dinuka Adasooriya, Yonsei University College of Dentistry, Seoul, Korea
 
-# List of required packages
-required_pkgs <- c(
-  "shiny",
-  "shinyjs",       # For showing/hiding the edit panel and other controls
-  "colourpicker",  # For the color input
-  "VennDiagram",   # For 4-5 set Venn diagrams
-  "ggvenn",        # For 2-3 set Venn diagrams
-  "dplyr",         # For data manipulation
-  "DT",            # For interactive data tables
-  "shinyWidgets",  # For modern UI elements
-  "readxl",        # For reading Excel files (.xlsx)
-  "openxlsx",      # Alternative for Excel files
-  "tools",         # For file extension handling
-  "grid"           # For grid.draw in VennDiagram
-)
+# ---- Load Required Packages ----
+# Note: Packages are installed by the server based on manifest.json. 
+# We only need to load them here.
 
-# Install missing packages
-missing_pkgs <- required_pkgs[!(required_pkgs %in% installed.packages()[, "Package"])]
-if (length(missing_pkgs) > 0) {
-  install.packages(missing_pkgs)
-}
+library(shiny)
+library(shinyjs)       # For showing/hiding the edit panel and other controls
+library(colourpicker)  # For the color input
+library(VennDiagram)   # For 4-5 set Venn diagrams
+library(ggvenn)        # For 2-3 set Venn diagrams
+library(dplyr)         # For data manipulation
+library(DT)            # For interactive data tables
+library(shinyWidgets)  # For modern UI elements
+library(readxl)        # For reading Excel files (.xlsx)
+library(openxlsx)      # Alternative for Excel files
+library(tools)         # For file extension handling
+library(grid)          # For grid.draw in VennDiagram
 
-# Load all packages
-lapply(required_pkgs, library, character.only = TRUE)
+# Set maximum file upload size to 50MB
+options(shiny.maxRequestSize = 50 * 1024^2)
 
 # Set maximum file upload size to 50MB
 options(shiny.maxRequestSize = 50 * 1024^2)
@@ -1238,5 +1233,6 @@ server <- function(input, output, session) {
     }
   )
 }
+
 
 shinyApp(ui = ui, server = server)
