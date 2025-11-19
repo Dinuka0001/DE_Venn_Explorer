@@ -32,8 +32,6 @@ Developed by **Dinuka Adasooriya**, Yonsei University College of Dentistry, Seou
 ---
 
 ## 📦 Required Packages
-The app automatically installs missing packages:
-
 ```r
 shiny
 shinyjs
