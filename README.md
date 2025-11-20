@@ -1,19 +1,20 @@
 # DE Venn Explorer
 
 **Version 2.0 (Enhanced)**  
-An interactive **R Shiny application** for visualizing and comparing **differential gene expression (DE)** overlaps across multiple datasets.  
+**DE Venn Explorer** is an interactive **R Shiny application** for visualizing and comparing **differential gene expression (DE)** overlaps across multiple datasets.  
+It supports 2–5 DE gene sets, flexible statistical filters, and multiple visualization types (Venn, Euler, UpSet, Sankey) to help you explore shared and unique genes from RNA‑seq or other expression analyses.
+
 Developed by **Dinuka Adasooriya**, Yonsei University College of Dentistry, Seoul, Korea.
 
 ---
 
 ## Access
 
-- **GitHub repository** (source code, issues, and development):  
-  https://github.com/Dinuka0001/DE_Venn_Explorer.git
-
-- **Online app (Posit Cloud)** – run DE Venn Explorer directly in your browser:  
+- **Live app (Posit Cloud)** – run DE Venn Explorer in your browser:  
   https://dinuka-de-venn-explorer.share.connect.posit.cloud
 
+- **Source code and issues (GitHub):**  
+  https://github.com/Dinuka0001/DE-Venn-Explorer
 ---
 
 ## Key Features
