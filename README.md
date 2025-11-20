@@ -63,7 +63,7 @@ Developed by **Dinuka Adasooriya**, Yonsei University College of Dentistry, Seou
 
 Supported formats:
 - **Text**: `.csv`, `.tsv`, `.txt`  
-- **Excel**: `.xlsx`, `.xls`
+- **Excel**: `.xlsx`, (.xls is not supported, please convert the .xls files to .xlsx or .csv before upload)
 
 Automatic handling:
 - Separator detection (comma, tab, semicolon) for text files  
