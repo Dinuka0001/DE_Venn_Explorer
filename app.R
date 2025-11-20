@@ -1,6 +1,6 @@
 # ==================================================================
 # DE Venn Explorer: An interactive tool for visualizing and comparing differential gene expression overlaps.
-# Version (2.0) - Enhanced with file upload OR paste genes options
+# Version (1.1) - Enhanced with file upload OR paste genes options
 # By Dinuka Adasooriya, Yonsei University College of Dentistry, Seoul, Korea
 # ==================================================================
 
@@ -1640,3 +1640,4 @@ Computing, Vienna, Austria. <https://www.R-project.org/>.
 }
 
 shinyApp(ui = ui, server = server)
+
