@@ -1,11 +1,12 @@
 # DE Venn Explorer
-**Version 1.1**  
+
+**Version 2.0 (Enhanced)**  
 An interactive **R Shiny application** for visualizing and comparing **differential gene expression (DE)** overlaps across multiple datasets.  
 Developed by **Dinuka Adasooriya**, Yonsei University College of Dentistry, Seoul, Korea.
 
 ---
 
-## 🔗 Access
+## Access
 
 - **GitHub repository** (source code, issues, and development):  
   https://github.com/Dinuka0001/DE_Venn_Explorer.git
@@ -15,127 +16,171 @@ Developed by **Dinuka Adasooriya**, Yonsei University College of Dentistry, Seou
 
 ---
 
-## ✨ Features
+## Key Features
 
-- Analyze **2–5 datasets** in one session
+### General
+
+- Analyze **2–5 datasets** in a single session.
 - Two data input modes:
-  - **Upload DE result files** (CSV, TSV, TXT, XLSX, XLS)
-  - **Paste pre-filtered significant gene IDs/names** (one per line, per dataset)
-- Automatic detection of (for file uploads):
-  - Gene ID column  
-  - Gene name column (optional)  
-  - Adjusted p-value (padj) column  
-  - Log2 fold-change (log2FC) column  
-- Apply statistical filters (file upload mode):
-  - Adjusted p-value cutoff  
-  - |Log2FC| cutoff (optional toggle)  
-- Robust file handling:
-  - Automatic separator detection for text files (comma, tab, semicolon)
-  - Excel sheet selection for multi-sheet XLSX/XLS files
-  - Helpful guidance for problematic **.xls** files (recommend converting to .xlsx or .csv)
-  - Increased upload size limit (**up to 50 MB** total)
-- Generates:
-  - **2–3 set Venn diagrams** (ggvenn)
-  - **4–5 set Venn diagrams** (VennDiagram)
-- Fully editable Venn diagrams:
-  - Set labels  
-  - Colors  
-  - Font sizes for labels and counts  
-  - Optional percentage display for 2–3 set diagrams
-- Summary and gene-level views:
-  - Overlap summary:  
-    - Number of genes per set  
-    - Intersection counts  
-    - Downloadable summary (TXT)
-  - Interactive gene tables for each overlap with export (copy, CSV, Excel)
-- Download:
-  - Venn diagram (PNG / SVG)
-  - Overlap gene lists (CSV)
-- Additional information:
-  - File details, column mappings, and summary statistics
-  - “About” tab with app and package information
+  1. **Upload DE result files** (CSV, TSV, TXT, XLSX)  
+  2. **Paste pre-filtered significant gene IDs/names** (one per line, per dataset)
+- Automatic detection of key columns for uploaded files:
+  - Gene ID column (required)
+  - Gene name column (optional)
+  - Adjusted p-value (`padj`) column
+  - Log2 fold-change (`log2FC`) column
+- Flexible statistical filtering (file upload mode):
+  - Adjusted p-value cutoff
+  - Optional absolute Log2FC cutoff
+- Increased upload size limit – up to **50 MB total**.
+
+### New/Enhanced in v2.1
+
+- **Gene direction filter**
+  - Restrict overlaps to:
+    - All significant genes  
+    - Upregulated genes only (Log2FC > 0)  
+    - Downregulated genes only (Log2FC < 0)  
+  - Works together with `padj` and |Log2FC| filtering.
+
+- **New visualization types**
+  - **Euler diagrams** (`eulerr`)  
+    - Area-proportional Euler diagrams as an alternative to classical Venns.
+  - **UpSet plots** (`UpSetR`)  
+    - For high-dimensional overlaps and when more than 3–4 sets are used.
+  - **Sankey diagrams** (`networkD3`)  
+    - Visualize “flow” of genes across datasets / directions with customizable colors.
+
+- **Improved UI and workflow**
+  - Sidebar reorganized into:
+    - Data input (file vs paste)
+    - Significance & log2FC filters
+    - Diagram type & appearance
+  - Diagram-specific options shown only when relevant (e.g., Sankey color settings).
+  - Clear notifications for:
+    - Missing/invalid columns
+    - Skipped files
+    - Unsupported export actions (e.g., Sankey download).
+
+- **Enhanced exports and reporting**
+  - Venn / Euler / UpSet diagrams exportable as:
+    - **PNG**
+    - **SVG** (where supported)
+  - Structured representation of overlaps reused for:
+    - Plots
+    - Summary tables
+    - Downloadable gene lists.
 
 ---
 
-## 📂 Input Data
+## Input Data
 
 ### Option 1 – Upload DE Result Files
 
-Supported formats:
-- **Text**: `.csv`, `.tsv`, `.txt`  
-- **Excel**: `.xlsx`, (.xls is not supported, please convert the .xls files to .xlsx or .csv before upload)
+**Supported formats**
 
-Automatic handling:
-- Separator detection (comma, tab, semicolon) for text files  
-- Sheet selection dialog for Excel files  
-- Column mapping interface:
-  - Choose gene ID column (required)  
-  - Optionally choose gene name column  
-  - Choose adjusted p-value (`padj`) column  
-  - Choose log2 fold-change (`log2FC`) column
+- Text: `.csv`, `.tsv`, `.txt`  
+- Excel: `.xlsx`  
+  - Legacy `.xls` files are not directly supported by the current version of the app; please convert `.xls` files to `.xlsx` or `.csv`.
 
-Filtering:
-- Specify **padj cutoff** (e.g. 0.05)  
-- Optionally enable **|log2FC| cutoff** and provide threshold (e.g. 1)  
+**Automatic handling**
 
-The app then extracts the list of **significant genes** for each dataset based on these criteria and uses them for overlap analysis and Venn diagram generation.
+- Separator detection for text files:
+  - Comma, tab, semicolon.
+- Sheet selection for Excel files with multiple sheets.
+- Column mapping:
+  - Choose **Gene ID** column (required).
+  - Optionally choose **Gene name** column.
+  - Choose **adjusted p-value (`padj`)** column.
+  - Choose **log2 fold-change (`log2FC`)** column (for LFC-based filters and direction filters).
 
-### Option 2 – Paste Gene Lists
+**Filtering**
 
-If you already have pre-filtered lists of significant genes:
+- Set a **padj cutoff** (e.g. 0.05).
+- Optionally turn on **|log2FC| cutoff** and provide a threshold (e.g. 1).
+- Optionally choose a **direction filter**:
+  - All significant genes
+  - Upregulated only (log2FC > 0)
+  - Downregulated only (log2FC < 0)
 
-- Select the **“Paste gene lists”** mode
-- For each dataset:
-  - Paste one gene ID or gene symbol **per line**
-  - Optionally provide a **dataset label**
-- The app uses these pasted lists directly for:
-  - Venn diagram generation  
-  - Overlap summaries  
-  - Downloadable intersection gene lists
+The app constructs a list of significant genes per dataset from these criteria and uses them for all downstream analyses.
 
 ---
 
-## 📊 Outputs
+### Option 2 – Paste Gene Lists
 
-### Venn Diagrams
+If you already have pre-filtered significant genes:
 
-- **2–3 datasets**:
-  - Drawn using **ggvenn**
-  - Option to display **counts only** or **counts + percentages**
-- **4–5 datasets**:
-  - Drawn using **VennDiagram**
-  - Counts displayed for all intersection regions where possible
+- Select the **“Paste gene IDs/names”** mode.
+- For each dataset:
+  - Provide a dataset label.
+  - Paste gene IDs or names, **one per line
+The app uses these pasted lists directly for:
 
-Customization options:
+- Venn diagram generation  
+- Overlap summaries  
+- Downloadable intersection gene lists  
+
+> Note: This mode bypasses internal DE filtering (`padj` / `log2FC`) and assumes the pasted lists are already filtered.
+
+---
+
+## Outputs
+
+### 1. Venn Diagrams
+
+#### 2–3 datasets
+
+- Rendered with **ggvenn**
+- Option to display:
+  - Counts only
+  - Counts + percentages
+
+#### 4–5 datasets
+
+- Rendered with **VennDiagram**
+- Counts shown for all intersection regions where possible
+
+**Customization options**
+
 - Set labels and label order  
 - Fill colors for each set  
 - Label font size  
 - Count font size  
-- Optional title text
+- Optional title text  
 
-You can download Venn diagrams as:
-- **PNG**
-- **SVG**
+**Export formats**
 
-### Overlap Summary & Gene Tables
-
-- Numeric summary for each dataset:
-  - Total number of significant genes per set  
-  - Size of each intersection
-- Summary downloadable as **TXT**
-- For each intersection (e.g. A ∩ B, A ∩ B ∩ C):
-  - Interactive gene table (DT)
-  - Sorting and searching within the table
-  - Export gene lists as:
-    - Copy to clipboard  
-    - CSV  
-    - Excel
+- PNG  
+- SVG  
 
 ---
 
-## 📦 Required R Packages
+### 2. Overlap Summary and Gene Tables
+
+**Numeric summary for each dataset:**
+
+- Total number of significant genes per set  
+- Size of each intersection  
+- Summary downloadable as **TXT**
+
+**For each intersection** (e.g., *A ∩ B*, *A ∩ B ∩ C*):
+
+- Interactive gene table (**DT**)
+- Sorting, filtering, and searching within the table
+
+**Export options:**
+
+- Copy to clipboard  
+- CSV  
+- Excel  
+
+---
+
+## Required R Packages
 
 ```r
+# Core dependencies
 shiny
 shinyjs
 colourpicker
@@ -149,8 +194,7 @@ openxlsx
 tools
 grid
 
-## To install them in R:
-```r
+#To install them in R:
 pkgs <- c(
   "shiny", "shinyjs", "colourpicker", "VennDiagram", "ggvenn",
   "dplyr", "DT", "shinyWidgets", "readxl", "openxlsx"
@@ -160,14 +204,3 @@ to_install <- pkgs[!(pkgs %in% installed.packages()[, "Package"])]
 if (length(to_install) > 0) {
   install.packages(to_install)
 }
-
-
-## How to Run Locally
-# 1. Install required packages (see above)
-# 2. Install or clone the app
-
-# From GitHub (if using remotes or devtools):
-# remotes::install_github("Dinuka0001/DE_Venn_Explorer")
-
-# Or clone manually and set working directory to the app folder, then:
-shiny::runApp("path/to/DE_Venn_Explorer")
