@@ -1,5 +1,5 @@
 # DE Venn Explorer
-**Version 2.0**  
+**Version 1.1**  
 An interactive **R Shiny application** for visualizing and comparing **differential gene expression (DE)** overlaps across multiple datasets.  
 Developed by **Dinuka Adasooriya**, Yonsei University College of Dentistry, Seoul, Korea.
 
