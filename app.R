@@ -1,33 +1,14 @@
 # ==================================================================
 # DE Venn Explorer: An interactive tool for visualizing and comparing differential gene expression overlaps.
-# Version (1.1) - Enhanced with file upload OR paste genes options
+# Version (2.0) Enhanced - Added gene direction filter, Euler, Sankey diagrams.
 # By Dinuka Adasooriya, Yonsei University College of Dentistry, Seoul, Korea
 # ==================================================================
 
-# # List of required packages
-# pkgs <- c(
-#   "shiny",
-#   "shinyjs",
-#   "colourpicker",
-#   "VennDiagram",
-#   "ggvenn",
-#   "dplyr",
-#   "DT",
-#   "shinyWidgets",
-#   "readxl",
-#   "openxlsx",
-#   "tools",  # comes with base R but kept here for completeness
-#   "grid"    # comes with base R but kept here for completeness
-# )
-#
-# # Install any that are not already installed
-# to_install <- pkgs[!(pkgs %in% installed.packages()[, "Package"])]
-# if (length(to_install) > 0) {
-#   install.packages(to_install)
-# } else {
-#   message("All packages are already installed.")
-# }
-
+#install.packages(c(
+#  "shiny", "shinyjs", "colourpicker", "VennDiagram", "ggvenn",
+#  "dplyr", "DT", "shinyWidgets", "readxl", "openxlsx", "grid",
+# "UpSetR", "eulerr", "ggplot2", "showtext", "networkD3", "htmlwidgets"
+#))
 
 # List of required packages
 library(shiny)
@@ -42,13 +23,24 @@ library(readxl)
 library(openxlsx)
 library(tools)
 library(grid)
+library(UpSetR)
+library(eulerr)
+library(ggplot2)
+library(showtext)
+library(networkD3)
 
 # Set maximum file upload size to 50MB
 options(shiny.maxRequestSize = 50 * 1024^2)
 
 # ---- UI ----
 ui <- fluidPage(
-  titlePanel("DE Venn Explorer"),
+  titlePanel(
+    windowTitle = "DE Venn Explorer v2.0",
+    title = div(
+      "DE Venn Explorer",
+      tags$small("v2.0", style = "margin-left: 10px; font-size: 60%; color: #777;")
+    )
+  ),
   tags$h5("An interactive tool for visualizing and comparing differential gene expression overlaps."),
 
   # Enhanced CSS
@@ -70,7 +62,7 @@ ui <- fluidPage(
         border: 1px solid #e9ecef;
         border-radius: 6px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        margin-bottom: 15px;  /* Added for better spacing */
+        margin-bottom: 15px;
       }
       .btn-primary {
         background-color: #0073C2;
@@ -106,11 +98,11 @@ ui <- fluidPage(
         position: fixed;
         top: 60px;
         right: 20px;
-        width: 400px;  /* Increased for longer messages */
+        width: 400px;
       }
       hr {
         border-top: 1px solid #dee2e6;
-        margin: 25px 0;  /* Increased for better section separation */
+        margin: 25px 0;
       }
       .form-control:focus {
         border-color: #0073C2;
@@ -124,11 +116,16 @@ ui <- fluidPage(
         border-radius: 4px;
         margin-top: 10px;
       }
+      /* Utility class to align buttons with input labels */
+      .align-btn-with-input {
+        margin-top: 25px;
+      }
     "))
   ),
   useShinyjs(),
-  sidebarLayout( # Consider adjusting sidebar width if it feels cramped
-    sidebarPanel(width = 3,
+  sidebarLayout(
+    sidebarPanel(
+      width = 3,
       h4("📊 Data Input Settings"),
       numericInput("num_datasets", "Number of datasets (2–5):",
         value = 2, min = 2, max = 5, step = 1
@@ -206,7 +203,22 @@ ui <- fluidPage(
         numericInput("lfc_cutoff", "Absolute Log2FC Cutoff:",
           value = 1, min = 0, step = 0.1
         ),
-        checkboxInput("use_lfc", "Apply Log2FC filter", value = TRUE)
+        checkboxInput("use_lfc", "Apply Log2FC filter", value = TRUE),
+        hr(),
+        h4("🎯 Gene Direction Filter"),
+        radioButtons("gene_direction",
+          "Include genes:",
+          choices = c(
+            "All significant genes" = "all",
+            "Upregulated only (Log2FC > 0)" = "up",
+            "Downregulated only (Log2FC < 0)" = "down"
+          ),
+          selected = "all"
+        ),
+        helpText(
+          icon("info-circle"),
+          "Filter genes based on their expression direction. Only applies when Log2FC filter is enabled."
+        )
       ),
 
       # Paste genes section
@@ -221,29 +233,55 @@ ui <- fluidPage(
         actionButton("clear_paste", "Clear All Pasted Data", icon = icon("eraser"), class = "btn-warning btn-sm btn-block")
       ),
       hr(),
-      actionButton("generate", "Generate Venn Diagram",
-        class = "btn-primary btn-block",  # Consider removing btn-block if buttons feel too wide
+      actionButton("generate", "Generate Diagram",
+        class = "btn-primary btn-block",
         icon = icon("chart-area")
-      ),
-      br(), br(),
-      downloadButton("download_plot", "Download Diagram (PNG)",
-        class = "btn-block"
-      ),
-      downloadButton("download_svg", "Download Diagram (SVG)",
-        class = "btn-block"
-      ),
-      downloadButton("download_overlaps", "Download Overlaps (CSV)",
-        class = "btn-block"
       )
     ),
-    mainPanel(width = 9,
+    mainPanel(
+      width = 9,
       tabsetPanel(
         tabPanel(
-          "📊 Venn Diagram",
+          "📊 Visualization",
+          br(),
+          # Layout for Select and Downloads in one row
+          fluidRow(
+            column(
+              width = 4,
+              selectInput("diagram_type", "Select Diagram Type:",
+                choices = c(
+                  "Venn Diagram" = "venn",
+                  "UpSet Plot" = "upset",
+                  "Euler Diagram" = "euler",
+                  "Sankey Diagram" = "sankey"
+                ),
+                selected = "venn"
+              )
+            ),
+            column(
+              width = 8,
+              class = "align-btn-with-input",
+              div(
+                style = "display: inline-block; vertical-align: top;",
+                downloadButton("download_plot", "Download (PNG)", class = "btn-default")
+              ),
+              div(
+                style = "display: inline-block; vertical-align: top; margin-left: 5px;",
+                downloadButton("download_svg", "Download (SVG)", class = "btn-default")
+              )
+            )
+          ),
           fluidRow(
             column(
               width = 8,
-              plotOutput("venn_plot", height = "600px")  # Consider "auto" for responsive height
+              conditionalPanel(
+                condition = "input.diagram_type != 'sankey'",
+                plotOutput("main_plot", height = "600px")
+              ),
+              conditionalPanel(
+                condition = "input.diagram_type == 'sankey'",
+                sankeyNetworkOutput("sankey_plot", height = "600px")
+              )
             ),
             column(
               width = 4,
@@ -263,18 +301,40 @@ ui <- fluidPage(
                   numericInput("number_font_size", "Number Font Size:",
                     value = 1.5, min = 0.1, max = 5, step = 0.1
                   ),
-                  helpText("For 2–3 sets: set_name_size / text_size (ggvenn).
-For 4–5 sets: cat.cex / cex (VennDiagram)."),
+                  helpText("For 2–3 sets: set_name_size / text_size (ggvenn). For 4–5 sets: cat.cex / cex (VennDiagram)."),
                   hr(),
                   h5("Set Labels"),
                   uiOutput("label_inputs"),
                   hr(),
-                  h5("Set Colors"),
-                  uiOutput("color_inputs"),
-                  hr(),
-                  checkboxInput("show_percent",
-                    "Show percentage values (for 2–3 set diagrams)",
-                    value = TRUE
+
+                  # Color options - conditional based on diagram type
+                  conditionalPanel(
+                    condition = "input.diagram_type == 'venn' || input.diagram_type == 'euler'",
+                    h5("Set Colors"),
+                    uiOutput("color_inputs"),
+                    hr()
+                  ),
+                  conditionalPanel(
+                    condition = "input.diagram_type == 'upset'",
+                    h5("UpSet Plot Colors"),
+                    colourInput("upset_main_bar_color", "Main Bar Color:", value = "#0073C2FF"),
+                    colourInput("upset_sets_bar_color", "Sets Bar Color:", value = "#EFC000FF"),
+                    colourInput("upset_matrix_color", "Matrix Dot Color:", value = "#404040"),
+                    hr()
+                  ),
+                  conditionalPanel(
+                    condition = "input.diagram_type == 'sankey'",
+                    h5("Sankey Diagram Colors"),
+                    uiOutput("sankey_color_inputs"),
+                    colourInput("sankey_link_color", "Link Opacity Color:", value = "#CCCCCC"),
+                    hr()
+                  ),
+                  conditionalPanel(
+                    condition = "input.diagram_type == 'venn'",
+                    checkboxInput("show_percent",
+                      "Show percentage values (for 2–3 set diagrams)",
+                      value = TRUE
+                    )
                   )
                 )
               )
@@ -289,11 +349,22 @@ For 4–5 sets: cat.cex / cex (VennDiagram)."),
           h4("Intersection Counts"),
           tableOutput("intersection_table"),
           hr(),
-          downloadButton("download_summary_txt", "Download Summary (TXT)", class = "btn-sm")
+          downloadButton("download_summary_txt", "Download Summary (TXT)", class = "btn-default")
         ),
         tabPanel(
           "🔍 Gene Lists",
-          selectInput("overlap_select", "Select Overlap:", choices = NULL),
+          br(),
+          fluidRow(
+            column(
+              width = 4,
+              selectInput("overlap_select", "Select Overlap:", choices = NULL)
+            ),
+            column(
+              width = 8,
+              class = "align-btn-with-input",
+              downloadButton("download_overlaps", "Download Gene List (CSV)", class = "btn-default")
+            )
+          ),
           DTOutput("gene_table")
         ),
         tabPanel(
@@ -302,7 +373,7 @@ For 4–5 sets: cat.cex / cex (VennDiagram)."),
         ),
         tabPanel(
           "ℹ️ About",
-          h3("DE Venn Explorer"),
+          h3("DE Venn Explorer v2.0"),
           p("An interactive tool for visualizing and comparing differential gene expression overlaps."),
           br(),
           p(strong("Developer:"), "Dinuka Adasooriya"),
@@ -336,7 +407,6 @@ For 4–5 sets: cat.cex / cex (VennDiagram)."),
       )
     )
   ),
-  # Footer as page child (safer than using a named arg)
   tags$footer(
     "DE Venn Explorer v2.0 | An interactive tool for visualizing and comparing differential gene expression overlaps",
     tags$br(),
@@ -346,6 +416,9 @@ For 4–5 sets: cat.cex / cex (VennDiagram)."),
 
 # ---- Server ----
 server <- function(input, output, session) {
+  # Enable custom fonts for plots
+  showtext_auto()
+
   # Reactive values to store data
   gene_lists <- reactiveVal(NULL)
   gene_names_data <- reactiveVal(NULL)
@@ -670,7 +743,6 @@ server <- function(input, output, session) {
       list(file_triggers, sheet_triggers, input$input_method, input$num_datasets)
     },
     {
-      # Only process if using file upload method
       if (is.null(input$input_method) || input$input_method != "file") {
         return(NULL)
       }
@@ -679,13 +751,11 @@ server <- function(input, output, session) {
         return(NULL)
       }
 
-      # Clear old data
       gene_lists(NULL)
       gene_names_data(NULL)
       all_overlaps(NULL)
       updateSelectInput(session, "overlap_select", choices = character(0))
 
-      # Detect columns from first available file
       n <- input$num_datasets
       first_index <- NULL
 
@@ -726,7 +796,6 @@ server <- function(input, output, session) {
 
       col_names <- colnames(df)
 
-      # Enhanced column detection patterns
       gene_id_defaults <- c("gene_id", "gene", "Gene_ID", "GeneID", "ID", "ensembl_gene_id", "ensembl", "ENSEMBL")
       gene_name_defaults <- c("gene_name", "gene_symbol", "GeneName", "Symbol", "Name", "external_gene_name", "SYMBOL", "symbol")
       padj_defaults <- c("padj", "adj.P.Val", "FDR", "p.adjust", "pvalue_adj", "P.Value.adj", "adjusted_pvalue", "qvalue")
@@ -793,12 +862,10 @@ server <- function(input, output, session) {
     list_names <- names(gene_lists)
     overlaps <- list()
 
-    # Individual sets
     for (i in 1:n) {
       overlaps[[list_names[i]]] <- gene_lists[[i]]
     }
 
-    # Pairwise intersections
     if (n >= 2) {
       for (i in 1:(n - 1)) {
         for (j in (i + 1):n) {
@@ -808,7 +875,6 @@ server <- function(input, output, session) {
       }
     }
 
-    # Three-way intersections
     if (n >= 3) {
       for (i in 1:(n - 2)) {
         for (j in (i + 1):(n - 1)) {
@@ -824,7 +890,6 @@ server <- function(input, output, session) {
       }
     }
 
-    # Four-way intersections
     if (n >= 4) {
       for (i in 1:(n - 3)) {
         for (j in (i + 1):(n - 2)) {
@@ -843,7 +908,6 @@ server <- function(input, output, session) {
       }
     }
 
-    # Five-way intersection
     if (n == 5) {
       name <- paste(list_names, collapse = " ∩ ")
       overlaps[[name]] <- Reduce(intersect, gene_lists)
@@ -854,7 +918,6 @@ server <- function(input, output, session) {
 
   # ---- Generate analysis on click ----
   observeEvent(input$generate, {
-    # Validate number of datasets
     if (is.na(input$num_datasets) || input$num_datasets < 2 || input$num_datasets > 5) {
       showNotification("⚠️ Please enter a valid number of datasets (2-5).",
         type = "warning", duration = 5
@@ -868,14 +931,12 @@ server <- function(input, output, session) {
       # FILE UPLOAD METHOD
       req(input$gene_col, input$padj_col)
 
-      # Validate all files are uploaded
       uploaded_files <- lapply(1:n_datasets, function(i) input[[paste0("file", i)]])
       if (any(vapply(uploaded_files, is.null, logical(1)))) {
         showNotification("⚠️ Please upload all selected files.", type = "warning", duration = 5)
         return(NULL)
       }
 
-      # Validate required columns
       if (input$use_lfc && (is.null(input$lfc_col) || input$lfc_col == "")) {
         showNotification("⚠️ Please specify Log2FC column when Log2FC filter is enabled.",
           type = "warning", duration = 5
@@ -902,7 +963,6 @@ server <- function(input, output, session) {
                 next
               }
 
-              # Validate required columns exist
               if (!input$gene_col %in% colnames(df)) {
                 showNotification(
                   paste(
@@ -951,6 +1011,13 @@ server <- function(input, output, session) {
                     padj_numeric < input$padj_cutoff,
                     abs(lfc_numeric) > input$lfc_cutoff
                   )
+
+                # Apply gene direction filter
+                if (input$gene_direction == "up") {
+                  sig_df <- sig_df %>% filter(lfc_numeric > 0)
+                } else if (input$gene_direction == "down") {
+                  sig_df <- sig_df %>% filter(lfc_numeric < 0)
+                }
               } else {
                 sig_df <- df %>%
                   mutate(
@@ -962,7 +1029,6 @@ server <- function(input, output, session) {
                   )
               }
 
-              # Extract significant genes
               sig_genes <- unique(as.character(sig_df[[input$gene_col]]))
               sig_genes <- sig_genes[!is.na(sig_genes) & sig_genes != ""]
 
@@ -974,7 +1040,6 @@ server <- function(input, output, session) {
 
               lists[[dataset_name]] <- sig_genes
 
-              # Extract gene names if available
               if (!is.null(input$gene_name_col) &&
                 input$gene_name_col != "" &&
                 input$gene_name_col %in% colnames(sig_df)) {
@@ -1019,7 +1084,6 @@ server <- function(input, output, session) {
             dataset_name <- paste("Dataset", i)
           }
 
-          # Parse genes
           genes <- strsplit(genes_text, "\n")[[1]]
           genes <- trimws(genes)
           genes <- genes[genes != ""]
@@ -1036,11 +1100,9 @@ server <- function(input, output, session) {
         }
       })
 
-      # No gene names in paste mode
       gene_names_data(NULL)
     }
 
-    # Check if we have valid data
     if (length(lists) == 0) {
       showNotification("❌ No valid data to analyze. Please check your input.",
         type = "error", duration = 10
@@ -1048,16 +1110,15 @@ server <- function(input, output, session) {
       return(NULL)
     }
 
-    # Ensure dataset names are unique to avoid accidental overwrites (make.unique)
     if (!is.null(names(lists)) && any(duplicated(names(lists)))) {
       names(lists) <- make.unique(names(lists))
-      showNotification("⚠️ Duplicate dataset names detected — names were made unique automatically.",
+      showNotification("⚠️ Duplicate dataset names detected – names were made unique automatically.",
         type = "warning", duration = 5
       )
     }
 
     if (length(lists) < 2) {
-      showNotification("❌ At least 2 valid datasets are required for Venn diagram.",
+      showNotification("❌ At least 2 valid datasets are required for diagram.",
         type = "error", duration = 10
       )
       return(NULL)
@@ -1072,7 +1133,6 @@ server <- function(input, output, session) {
       choices = names(overlaps)
     )
 
-    # Default diagram settings
     n <- length(lists)
     diagram_settings$labels <- names(lists)
     diagram_settings$colors <- c(
@@ -1080,8 +1140,7 @@ server <- function(input, output, session) {
       "#CD534CFF", "#7AA6DCFF"
     )[1:n]
 
-    # Reset font sizes
-    updateNumericInput(session, "label_font_size", value = 1.2)
+    updateNumericInput(session, "label_font_size", value = 1.0)
     updateNumericInput(session, "number_font_size", value = 1.5)
 
     showNotification("✅ Analysis complete!", type = "message", duration = 3)
@@ -1120,6 +1179,23 @@ server <- function(input, output, session) {
     )
   })
 
+  # ---- Dynamic UI: Sankey colors ----
+  output$sankey_color_inputs <- renderUI({
+    req(diagram_settings$colors, diagram_settings$labels)
+    colors <- diagram_settings$colors
+    labels <- diagram_settings$labels
+
+    tagList(
+      lapply(seq_along(colors), function(i) {
+        colourInput(
+          paste0("sankey_color_", i),
+          label = paste("Node", i, "color:", labels[i]),
+          value = colors[i]
+        )
+      })
+    )
+  })
+
   # ---- Helper: gather current plot settings ----
   `%||%` <- function(x, y) if (is.null(x)) y else x
 
@@ -1135,13 +1211,15 @@ server <- function(input, output, session) {
     plot_colors <- sapply(seq_along(diagram_settings$colors), function(i) {
       input[[paste0("color_", i)]] %||% diagram_settings$colors[i]
     })
-    # Ensure labels/colors length matches number of lists (n)
+
     plot_labels <- head(c(plot_labels, names(lists)), n)
     plot_colors <- head(c(plot_colors, diagram_settings$colors), n)
 
     plot_label_size <- input$label_font_size %||% 1.2
     plot_number_size <- input$number_font_size %||% 1.5
     show_percent <- input$show_percent %||% TRUE
+
+    # Removed font family selection logic as requested
 
     if (length(plot_labels) == n) {
       names(lists) <- plot_labels
@@ -1158,45 +1236,170 @@ server <- function(input, output, session) {
     )
   }
 
-  # ---- Plot ----
-  output$venn_plot <- renderPlot({
-    req(gene_lists())
+  # ---- Main plot output ----
+  output$main_plot <- renderPlot({
+    req(gene_lists(), input$diagram_type)
+    settings <- get_plot_settings()
 
     tryCatch(
       {
-        settings <- get_plot_settings()
+        if (input$diagram_type == "venn") {
+          # VENN DIAGRAM
+          if (settings$n == 2 || settings$n == 3) {
+            p <- ggvenn(
+              settings$lists,
+              fill_color      = settings$colors,
+              stroke_size     = 0.5,
+              set_name_size   = settings$label_size * 4,
+              text_size       = settings$number_size * 2.6,
+              show_percentage = settings$show_percent
+            )
+            print(p)
+          } else {
+            venn.plot <- venn.diagram(
+              x               = settings$lists,
+              filename        = NULL,
+              fill            = settings$colors,
+              alpha           = 0.5,
+              cex             = settings$number_size,
+              cat.cex         = settings$label_size,
+              cat.default.pos = "outer",
+              margin          = 0.1,
+              disable.logging = TRUE
+            )
+            grid::grid.draw(venn.plot)
+          }
+        } else if (input$diagram_type == "upset") {
+          # UPSET PLOT
+          lists <- settings$lists
+          all_genes <- unique(unlist(lists))
 
-        if (settings$n == 2 || settings$n == 3) {
-          ggvenn(
-            settings$lists,
-            fill_color = settings$colors,
-            stroke_size = 0.5,
-            set_name_size = settings$label_size * 4,
-            text_size = settings$number_size * 2.6,
-            show_percentage = settings$show_percent
+          mat <- sapply(lists, function(v) as.integer(all_genes %in% v))
+          mat <- as.data.frame(mat)
+          rownames(mat) <- all_genes
+
+          # Get UpSet colors
+          upset_main <- input$upset_main_bar_color %||% "#0073C2FF"
+          upset_sets <- input$upset_sets_bar_color %||% "#EFC000FF"
+          upset_matrix <- input$upset_matrix_color %||% "#404040"
+
+          UpSetR::upset(
+            mat,
+            nsets = settings$n,
+            nintersects = NA,
+            order.by = "freq",
+            sets.x.label = "Set Size",
+            mainbar.y.label = "Intersection Size",
+            main.bar.color = upset_main,
+            sets.bar.color = upset_sets,
+            matrix.color = upset_matrix,
+            text.scale = c(1.3, 1.3, 1, 1, 1.5, 1.2)
           )
-        } else {
-          venn.plot <- venn.diagram(
-            x               = settings$lists,
-            filename        = NULL,
-            fill            = settings$colors,
-            alpha           = 0.5,
-            cex             = settings$number_size,
-            cat.cex         = settings$label_size,
-            cat.default.pos = "outer",
-            margin          = 0.1
+        } else if (input$diagram_type == "euler") {
+          # EULER DIAGRAM
+          lists <- settings$lists
+
+          # Create combinations for euler
+          euler_fit <- euler(lists)
+
+          plot(euler_fit,
+            fills = list(fill = settings$colors, alpha = 0.5),
+            labels = list(
+              fontsize = settings$label_size * 10
+            ),
+            quantities = list(
+              fontsize = settings$number_size * 8
+            ),
+            legend = list(labels = settings$labels)
           )
-          grid.draw(venn.plot)
         }
       },
       error = function(e) {
-        showNotification(paste("Error generating plot:", e$message),
+        showNotification(paste("Error generating diagram:", e$message),
           type = "error", duration = 10
         )
         plot.new()
-        text(0.5, 0.5, "Error generating Venn diagram\nCheck your data and settings",
+        text(0.5, 0.5, paste("Error generating diagram\n", e$message),
           cex = 1.2, col = "red"
         )
+      }
+    )
+  })
+
+  # ---- Sankey diagram output ----
+  output$sankey_plot <- renderSankeyNetwork({
+    req(all_overlaps(), input$diagram_type)
+    if (input$diagram_type != "sankey") {
+      return(NULL)
+    }
+
+    tryCatch(
+      {
+        overlaps <- all_overlaps()
+        lists <- gene_lists()
+        settings <- get_plot_settings()
+
+        # Get Sankey-specific colors
+        sankey_colors <- sapply(seq_along(settings$labels), function(i) {
+          input[[paste0("sankey_color_", i)]] %||% settings$colors[i]
+        })
+
+        # Build nodes
+        nodes <- data.frame(name = names(lists), stringsAsFactors = FALSE)
+        links <- data.frame(source = integer(), target = integer(), value = integer())
+
+        # For each pairwise intersection, create a link
+        for (i in 1:(length(lists) - 1)) {
+          for (j in (i + 1):length(lists)) {
+            intersection_name <- paste(names(lists)[i], "∩", names(lists)[j])
+            if (intersection_name %in% names(overlaps)) {
+              link_value <- length(overlaps[[intersection_name]])
+              if (link_value > 0) {
+                links <- rbind(links, data.frame(
+                  source = i - 1, # 0-indexed for networkD3
+                  target = j - 1,
+                  value = link_value
+                ))
+              }
+            }
+          }
+        }
+
+        if (nrow(links) == 0) {
+          return(NULL)
+        }
+
+        # Create color scale for nodes
+        color_js <- paste0(
+          "d3.scaleOrdinal().domain([",
+          paste0('"', nodes$name, '"', collapse = ","),
+          "]).range([",
+          paste0('"', sankey_colors, '"', collapse = ","),
+          "])"
+        )
+
+        sankeyNetwork(
+          Links = links,
+          Nodes = nodes,
+          Source = "source",
+          Target = "target",
+          Value = "value",
+          NodeID = "name",
+          NodeGroup = "name", # use node name as group so colours apply
+          fontSize = 14,
+          nodeWidth = 30,
+          height = 600,
+          width = 800,
+          colourScale = htmlwidgets::JS(color_js), # wrap JS string
+          sinksRight = TRUE,
+          iterations = 32
+        )
+      },
+      error = function(e) {
+        showNotification(paste("Error generating Sankey diagram:", e$message),
+          type = "error", duration = 10
+        )
+        NULL
       }
     )
   })
@@ -1224,17 +1427,17 @@ server <- function(input, output, session) {
       req(all_overlaps())
       overlaps <- all_overlaps()
       intersection_names <- if (!is.null(overlaps)) names(overlaps)[grepl("∩", names(overlaps))] else character(0)
-        
+
       intersection_df <- if (length(intersection_names) > 0) {
-         data.frame(
-           Intersection = intersection_names,
-           Count        = sapply(overlaps[intersection_names], length),
-           check.names  = FALSE
-         )
-       } else {
-         data.frame(Intersection = "No intersections found", Count = NA)
-       }
-      
+        data.frame(
+          Intersection = intersection_names,
+          Count        = sapply(overlaps[intersection_names], length),
+          check.names  = FALSE
+        )
+      } else {
+        data.frame(Intersection = "No intersections found", Count = NA)
+      }
+
       intersection_df
     },
     striped = TRUE,
@@ -1363,6 +1566,14 @@ server <- function(input, output, session) {
       cat("  P-adj cutoff:       ", input$padj_cutoff, "\n")
       cat("  Log2FC cutoff:      ", input$lfc_cutoff, "\n")
       cat("  Apply Log2FC filter:", input$use_lfc, "\n")
+      cat(
+        "  Gene direction:     ",
+        switch(input$gene_direction,
+          "all" = "All significant genes",
+          "up" = "Upregulated only",
+          "down" = "Downregulated only"
+        ), "\n"
+      )
     } else {
       cat("Pasted Gene Lists:\n")
       cat("───────────────────────────────────────────\n")
@@ -1401,94 +1612,143 @@ server <- function(input, output, session) {
   output$references <- renderPrint({
     cat(
       'Chang W, Cheng J, Allaire J, Sievert C, Schloerke B, Xie Y, Allen J, McPherson J, Dipert A, Borges B (2025).
-_shiny: Web Application Framework for R_. doi:10.32614/CRAN.package.shiny
-<https://doi.org/10.32614/CRAN.package.shiny>, R package version 1.11.1,
-<https://CRAN.R-project.org/package=shiny>.
+_shiny: Web Application Framework for R_. R package version 1.11.1.
 
 Attali D (2021). _shinyjs: Easily Improve the User Experience of Your Shiny Apps in Seconds_.
-doi:10.32614/CRAN.package.shinyjs <https://doi.org/10.32614/CRAN.package.shinyjs>, R package version 2.1.0,
-<https://CRAN.R-project.org/package=shinyjs>.
+R package version 2.1.0.
 
 Attali D (2023). _colourpicker: A Colour Picker Tool for Shiny and for Selecting Colours in Plots_.
-doi:10.32614/CRAN.package.colourpicker <https://doi.org/10.32614/CRAN.package.colourpicker>, R package version
-1.3.0, <https://CRAN.R-project.org/package=colourpicker>.
+R package version 1.3.0.
 
 Chen H (2022). _VennDiagram: Generate High-Resolution Venn and Euler Plots_.
-doi:10.32614/CRAN.package.VennDiagram <https://doi.org/10.32614/CRAN.package.VennDiagram>, R package version
-1.7.3, <https://CRAN.R-project.org/package=VennDiagram>.
+R package version 1.7.3.
 
-Yan L (2025). _ggvenn: Draw Venn Diagram by \'ggplot2\'_. doi:10.32614/CRAN.package.ggvenn
-<https://doi.org/10.32614/CRAN.package.ggvenn>, R package version 0.1.19,
-<https://CRAN.R-project.org/package=ggvenn>.
+Yan L (2025). _ggvenn: Draw Venn Diagram by ggplot2_. R package version 0.1.19.
 
 Wickham H, François R, Henry L, Müller K, Vaughan D (2023). _dplyr: A Grammar of Data Manipulation_.
-doi:10.32614/CRAN.package.dplyr <https://doi.org/10.32614/CRAN.package.dplyr>, R package version 1.1.4,
-<https://CRAN.R-project.org/package=dplyr>.
+R package version 1.1.4.
 
-Xie Y, Cheng J, Tan X, Aden-Buie G (2025). _DT: A Wrapper of the JavaScript Library \'DataTables\'_.
-doi:10.32614/CRAN.package.DT <https://doi.org/10.32614/CRAN.package.DT>, R package version 0.34.0,
-<https://CRAN.R-project.org/package=DT>.
+Xie Y, Cheng J, Tan X, Aden-Buie G (2025). _DT: A Wrapper of the JavaScript Library DataTables_.
+R package version 0.34.0.
 
 Perrier V, Meyer F, Granjon D (2025). _shinyWidgets: Custom Inputs Widgets for Shiny_.
-doi:10.32614/CRAN.package.shinyWidgets <https://doi.org/10.32614/CRAN.package.shinyWidgets>, R package version
-0.9.0, <https://CRAN.R-project.org/package=shinyWidgets>.
+R package version 0.9.0.
 
-Wickham H, Bryan J (2025). _readxl: Read Excel Files_. doi:10.32614/CRAN.package.readxl
-<https://doi.org/10.32614/CRAN.package.readxl>, R package version 1.4.5,
-<https://CRAN.R-project.org/package=readxl>.
+Wickham H, Bryan J (2025). _readxl: Read Excel Files_. R package version 1.4.5.
 
-Schauberger P, Walker A (2025). _openxlsx: Read, Write and Edit xlsx Files_. doi:10.32614/CRAN.package.openxlsx
-<https://doi.org/10.32614/CRAN.package.openxlsx>, R package version 4.2.8.1,
-<https://CRAN.R-project.org/package=openxlsx>.
+Schauberger P, Walker A (2025). _openxlsx: Read, Write and Edit xlsx Files_.
+R package version 4.2.8.1.
 
-R Core Team (2025). _R: A Language and Environment for Statistical Computing_. R Foundation for Statistical
-Computing, Vienna, Austria. <https://www.R-project.org/>.
+Conway JR, Lex A, Gehlenborg N (2017). "UpSetR: an R package for the visualization of intersecting sets and their properties."
+_Bioinformatics_, 33(18), 2938-2940.
+
+Larsson J (2024). _eulerr: Area-Proportional Euler and Venn Diagrams with Ellipses_.
+R package version 7.0.2.
+
+Allaire JJ, Gandrud C, Russell K, Yetman CJ (2017). _networkD3: D3 JavaScript Network Graphs from R_.
+R package version 0.4.
+
+Qiu Y, details. aotisSfAf (2024). _showtext: Using Fonts More Easily in R Graphs_.
+R package version 0.9-7,
+ 
+R Core Team (2025). _R: A Language and Environment for Statistical Computing_.
+R Foundation for Statistical Computing, Vienna, Austria.
 '
     )
   })
 
   # ---- Helper: Render and draw the plot ----
-  draw_venn_plot <- function(settings) {
+  draw_plot <- function(settings, diagram_type) {
     if (is.null(settings)) {
       stop("Plot settings are not available.")
     }
 
-    if (settings$n == 2 || settings$n == 3) {
-      p <- ggvenn(
-        settings$lists,
-        fill_color      = settings$colors,
-        stroke_size     = 0.5,
-        set_name_size   = settings$label_size * 4,
-        text_size       = settings$number_size * 2.6,
-        show_percentage = settings$show_percent
+    if (diagram_type == "venn") {
+      if (settings$n == 2 || settings$n == 3) {
+        p <- ggvenn(
+          settings$lists,
+          fill_color      = settings$colors,
+          stroke_size     = 0.5,
+          set_name_size   = settings$label_size * 4,
+          text_size       = settings$number_size * 2.6,
+          show_percentage = settings$show_percent
+        )
+        print(p)
+      } else {
+        venn.plot <- venn.diagram(
+          x               = settings$lists,
+          filename        = NULL,
+          fill            = settings$colors,
+          alpha           = 0.5,
+          cex             = settings$number_size,
+          cat.cex         = settings$label_size,
+          cat.default.pos = "outer",
+          margin          = 0.1
+        )
+        grid.draw(venn.plot)
+      }
+    } else if (diagram_type == "upset") {
+      lists <- settings$lists
+      all_genes <- unique(unlist(lists))
+
+      mat <- sapply(lists, function(v) as.integer(all_genes %in% v))
+      mat <- as.data.frame(mat)
+      rownames(mat) <- all_genes
+
+      # Get UpSet colors
+      upset_main <- input$upset_main_bar_color %||% "#0073C2FF"
+      upset_sets <- input$upset_sets_bar_color %||% "#EFC000FF"
+      upset_matrix <- input$upset_matrix_color %||% "#404040"
+
+      UpSetR::upset(
+        mat,
+        nsets = settings$n,
+        nintersects = NA,
+        order.by = "freq",
+        sets.x.label = "Set Size",
+        mainbar.y.label = "Intersection Size",
+        main.bar.color = upset_main,
+        sets.bar.color = upset_sets,
+        matrix.color = upset_matrix,
+        text.scale = c(1.3, 1.3, 1, 1, 1.5, 1.2)
       )
-      print(p)
-    } else {
-      venn.plot <- venn.diagram(
-        x               = settings$lists,
-        filename        = NULL,
-        fill            = settings$colors,
-        alpha           = 0.5,
-        cex             = settings$number_size,
-        cat.cex         = settings$label_size,
-        cat.default.pos = "outer",
-        margin          = 0.1
+    } else if (diagram_type == "euler") {
+      lists <- settings$lists
+      euler_fit <- euler(lists)
+
+      plot(euler_fit,
+        fills = list(fill = settings$colors, alpha = 0.5),
+        labels = list(
+          fontsize = settings$label_size * 10
+        ),
+        quantities = list(
+          fontsize = settings$number_size * 8
+        ),
+        legend = list(labels = settings$labels)
       )
-      grid.draw(venn.plot)
     }
   }
+
   # ---- Download plot (PNG) ----
   output$download_plot <- downloadHandler(
     filename = function() {
-      paste0("venn_diagram_", Sys.Date(), ".png")
+      paste0(input$diagram_type, "_diagram_", Sys.Date(), ".png")
     },
     content = function(file) {
+      if (input$diagram_type == "sankey") {
+        showNotification("⚠️ Sankey diagrams cannot be downloaded as PNG. Use browser screenshot instead.",
+          type = "warning", duration = 5
+        )
+        return(NULL)
+      }
+
       tryCatch(
         {
           png(file, width = 800, height = 800, res = 120)
+          showtext_opts(dpi = 120) # Match DPI for font rendering
           on.exit(if (dev.cur() > 1) dev.off(), add = TRUE)
           settings <- get_plot_settings()
-          draw_venn_plot(settings)
+          draw_plot(settings, input$diagram_type)
         },
         error = function(e) {
           showNotification(paste("Error saving plot:", e$message),
@@ -1502,15 +1762,23 @@ Computing, Vienna, Austria. <https://www.R-project.org/>.
   # ---- Download plot (SVG) ----
   output$download_svg <- downloadHandler(
     filename = function() {
-      paste0("venn_diagram_", Sys.Date(), ".svg")
+      paste0(input$diagram_type, "_diagram_", Sys.Date(), ".svg")
     },
     content = function(file) {
+      if (input$diagram_type == "sankey") {
+        showNotification("⚠️ Sankey diagrams cannot be downloaded as SVG. Use browser screenshot instead.",
+          type = "warning", duration = 5
+        )
+        return(NULL)
+      }
+
       tryCatch(
         {
           svg(file, width = 8, height = 8)
+          showtext_opts(dpi = 96) # Standard SVG DPI
           on.exit(if (dev.cur() > 1) dev.off(), add = TRUE)
           settings <- get_plot_settings()
-          draw_venn_plot(settings)
+          draw_plot(settings, input$diagram_type)
         },
         error = function(e) {
           showNotification(paste("Error saving SVG:", e$message),
@@ -1527,45 +1795,43 @@ Computing, Vienna, Austria. <https://www.R-project.org/>.
       paste0("overlap_summary_", Sys.Date(), ".txt")
     },
     content = function(file) {
-      
       if (is.null(gene_lists()) || length(gene_lists()) == 0) {
         showNotification("⚠️ No summary data to download.", type = "warning", duration = 5)
         return(NULL)
       }
-      
-      tryCatch({
-        
-        summary_df <- data.frame(
-          Dataset = names(gene_lists()),
-          `Number of Genes` = sapply(gene_lists(), length),
-          check.names = FALSE
-        )
-        
-        
-        overlaps <- all_overlaps()
-        intersection_names <- if (!is.null(overlaps)) names(overlaps)[grepl("∩", names(overlaps))] else character(0)
-        
-        intersection_df <- if (length(intersection_names) > 0) {
-           data.frame(
-             Intersection = intersection_names,
-             Count        = sapply(overlaps[intersection_names], length),
-             check.names  = FALSE
-           )
-         } else {
-           data.frame(Intersection = "No intersections found", Count = NA)
-         }
-        
-        
-        writeLines(c(
-          "Overlap Summary",
-          "===============",
-          "\nNumber of Genes per Set:", capture.output(print(summary_df, row.names = FALSE)),
-          "\nIntersection Counts:", capture.output(print(intersection_df, row.names = FALSE))
-        ), file)
-        
-      }, error = function(e) {
-        showNotification(paste("❌ Error creating summary file:", e$message), type = "error", duration = 10)
-      })
+
+      tryCatch(
+        {
+          summary_df <- data.frame(
+            Dataset = names(gene_lists()),
+            `Number of Genes` = sapply(gene_lists(), length),
+            check.names = FALSE
+          )
+
+          overlaps <- all_overlaps()
+          intersection_names <- if (!is.null(overlaps)) names(overlaps)[grepl("∩", names(overlaps))] else character(0)
+
+          intersection_df <- if (length(intersection_names) > 0) {
+            data.frame(
+              Intersection = intersection_names,
+              Count        = sapply(overlaps[intersection_names], length),
+              check.names  = FALSE
+            )
+          } else {
+            data.frame(Intersection = "No intersections found", Count = NA)
+          }
+
+          writeLines(c(
+            "Overlap Summary",
+            "===============",
+            "\nNumber of Genes per Set:", capture.output(print(summary_df, row.names = FALSE)),
+            "\nIntersection Counts:", capture.output(print(intersection_df, row.names = FALSE))
+          ), file)
+        },
+        error = function(e) {
+          showNotification(paste("❌ Error creating summary file:", e$message), type = "error", duration = 10)
+        }
+      )
     }
   )
 
@@ -1620,7 +1886,6 @@ Computing, Vienna, Austria. <https://www.R-project.org/>.
             df
           })
 
-          # remove NULLs (empty overlaps) and handle empty result
           out_list_nonnull <- Filter(Negate(is.null), out_list)
           if (length(out_list_nonnull) == 0) {
             out_df <- data.frame(Overlap = character(0), Gene_ID = character(0), Gene_Name = character(0), stringsAsFactors = FALSE)
@@ -1640,4 +1905,3 @@ Computing, Vienna, Austria. <https://www.R-project.org/>.
 }
 
 shinyApp(ui = ui, server = server)
-
