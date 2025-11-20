@@ -34,7 +34,7 @@ Developed by **Dinuka Adasooriya**, Yonsei University College of Dentistry, Seou
   - Optional absolute Log2FC cutoff
 - Increased upload size limit – up to **50 MB total**.
 
-### New/Enhanced in v2.1
+### New/Enhanced in v2.0
 
 - **Gene direction filter**
   - Restrict overlaps to:
